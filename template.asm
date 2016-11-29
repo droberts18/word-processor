@@ -1,13 +1,39 @@
-; 32-bit assembly language template
+; A word processor designed by Geoff Rich and Drew Roberts
+; ---------------------------------------------------------
 
-include Irvine32.inc
+INCLUDE Irvine32.inc
+
+getche PROTO C
+
+lineLength = 50
+
+.data
+buffer BYTE lineLength DUP(?)
+name1 BYTE "thisname", 0
+fileHandle HANDLE ?
 
 .code
-main proc
+asmMain proc C
+	mov esi, 0
+	mov ecx, lineLength
+	
+	L1:
+		push ecx
+		call getche
+		mov buffer[esi], al
+		add esi, 1
+		pop ecx
+		loop L1
 
+	mov edx, OFFSET name1
+	call CreateOutputFile
+	mov fileHandle, eax
+	
+	mov edx, OFFSET buffer
+	mov ecx, lineLength
+	call WriteToFile
+	call CloseFile
 
-
-
-	invoke ExitProcess,0
-main endp
-end main
+	ret
+asmMain endp
+end

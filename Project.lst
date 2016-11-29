@@ -1,10 +1,11 @@
-Microsoft (R) Macro Assembler Version 14.00.24210.0	    11/29/16 15:06:01
+Microsoft (R) Macro Assembler Version 14.00.24210.0	    11/29/16 15:43:51
 template.asm						     Page 1 - 1
 
 
-				; 32-bit assembly language template
+				; A word processor designed by Geoff Rich and Drew Roberts
+				; ---------------------------------------------------------
 
-				include Irvine32.inc
+				INCLUDE Irvine32.inc
 			      C ; Include file for Irvine32.lib             (Irvine32.inc)
 			      C 
 			      C ;OPTION CASEMAP:NONE		; optional: make identifiers case-sensitive
@@ -23,18 +24,47 @@ template.asm						     Page 1 - 1
 			      C .LIST
 			      C 
 
+				getche PROTO C
+
+ = 00000032			lineLength = 50
+
+ 00000000			.data
+ 00000000  00000032 [		buffer BYTE lineLength DUP(?)
+	    00
+	   ]
+ 00000032 74 68 69 73 6E	name1 BYTE "thisname", 0
+	   61 6D 65 00
+ 0000003B 00000000		fileHandle HANDLE ?
+
  00000000			.code
- 00000000			main proc
+ 00000000			asmMain proc C
+ 00000000  BE 00000000			mov esi, 0
+ 00000005  B9 00000032			mov ecx, lineLength
+					
+ 0000000A				L1:
+ 0000000A  51					push ecx
+ 0000000B  E8 00000000 E			call getche
+ 00000010  88 86 00000000 R			mov buffer[esi], al
+ 00000016  83 C6 01				add esi, 1
+ 00000019  59					pop ecx
+ 0000001A  E2 EE				loop L1
 
+ 0000001C  BA 00000032 R		mov edx, OFFSET name1
+ 00000021  E8 00000000 E		call CreateOutputFile
+ 00000026  A3 0000003B R		mov fileHandle, eax
+					
+ 0000002B  BA 00000000 R		mov edx, OFFSET buffer
+ 00000030  B9 00000032			mov ecx, lineLength
+ 00000035  E8 00000000 E		call WriteToFile
+ 0000003A  E8 00000000 E		call CloseFile
 
-
-
+ 0000003F  C3				ret
 					invoke ExitProcess,0
- 00000000  6A 00	   *	    push   +000000000h
- 00000002  E8 00000000 E   *	    call   ExitProcess
- 00000007			main endp
-				end main
-Microsoft (R) Macro Assembler Version 14.00.24210.0	    11/29/16 15:06:01
+ 00000040  6A 00	   *	    push   +000000000h
+ 00000042  E8 00000000 E   *	    call   ExitProcess
+ 00000047			asmMain endp
+				end
+Microsoft (R) Macro Assembler Version 14.00.24210.0	    11/29/16 15:43:51
 template.asm						     Symbols 2 - 1
 
 
@@ -128,8 +158,8 @@ Segments and Groups:
 
 FLAT . . . . . . . . . . . . . .	GROUP
 STACK  . . . . . . . . . . . . .	32 Bit	 00001000 Para	  Stack	  'STACK'	 
-_DATA  . . . . . . . . . . . . .	32 Bit	 00000000 Para	  Public  'DATA'	
-_TEXT  . . . . . . . . . . . . .	32 Bit	 00000007 Para	  Public  'CODE'	
+_DATA  . . . . . . . . . . . . .	32 Bit	 0000003F Para	  Public  'DATA'	
+_TEXT  . . . . . . . . . . . . .	32 Bit	 00000047 Para	  Public  'CODE'	
 
 
 Procedures, parameters, and locals:
@@ -236,7 +266,9 @@ WriteStackFrame  . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 WriteString  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteToFile  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteWindowsMsg  . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-main . . . . . . . . . . . . . .	P Near	 00000000 _TEXT	Length= 00000007 Public STDCALL
+asmMain  . . . . . . . . . . . .	P Near	 00000000 _TEXT	Length= 00000047 Public C
+  L1 . . . . . . . . . . . . . .	L Near	 0000000A _TEXT	
+getche . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External C
 printf . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External C
 scanf  . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External C
 wsprintfA  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External C
@@ -458,8 +490,10 @@ WriteConsole . . . . . . . . . .	Text   	 WriteConsoleA
 black  . . . . . . . . . . . . .	Number	 00000000h   
 blue . . . . . . . . . . . . . .	Number	 00000001h   
 brown  . . . . . . . . . . . . .	Number	 00000006h   
+buffer . . . . . . . . . . . . .	Byte	 00000000 _DATA	
 cyan . . . . . . . . . . . . . .	Number	 00000003h   
 exit . . . . . . . . . . . . . .	Text   	 INVOKE ExitProcess,0
+fileHandle . . . . . . . . . . .	DWord	 0000003B _DATA	
 gray . . . . . . . . . . . . . .	Number	 00000008h   
 green  . . . . . . . . . . . . .	Number	 00000002h   
 lightBlue  . . . . . . . . . . .	Number	 00000009h   
@@ -468,7 +502,9 @@ lightGray  . . . . . . . . . . .	Number	 00000007h
 lightGreen . . . . . . . . . . .	Number	 0000000Ah   
 lightMagenta . . . . . . . . . .	Number	 0000000Dh   
 lightRed . . . . . . . . . . . .	Number	 0000000Ch   
+lineLength . . . . . . . . . . .	Number	 00000032h   
 magenta  . . . . . . . . . . . .	Number	 00000005h   
+name1  . . . . . . . . . . . . .	Byte	 00000032 _DATA	
 red  . . . . . . . . . . . . . .	Number	 00000004h   
 white  . . . . . . . . . . . . .	Number	 0000000Fh   
 wsprintf . . . . . . . . . . . .	Text   	 wsprintfA

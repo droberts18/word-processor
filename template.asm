@@ -15,6 +15,9 @@ fileHandle HANDLE ?
 outHandle HANDLE ?
 consoleInfo CONSOLE_SCREEN_BUFFER_INFO < > 
 cursorPos COORD < >
+negOne WORD -1
+posOne WORD 1
+zero WORD 0
 
 .code
 asmMain proc C
@@ -26,24 +29,27 @@ asmMain proc C
 		call getch
 		cmp eax, 0e0h ; placed in buffer when arrow key pressed
 		jne checkcharbound
+			INVOKE GetConsoleScreenBufferInfo, outHandle, ADDR consoleInfo
+			mov ax, consoleInfo.dwCursorPosition.X
+			mov cursorPos.X, ax
+			mov ax, consoleInfo.dwCursorPosition.Y
+			mov cursorPos.Y, ax
+
 			call getch ; additional char needs to be flushed out
+			mov ebx, 0 ; ebx holds amount to move cursor
 			cmp eax, 04bh ; left arrow
-			jne endofloop
-				; if left arrow, move cursor left
-				INVOKE GetConsoleScreenBufferInfo, outHandle, ADDR consoleInfo
-				mov ax, consoleInfo.dwCursorPosition.X
-				mov cursorPos.X, ax
-				cmp cursorPos.X, 0
-				jle cursorY ; if zero or less, don't move the cursor back
-					dec cursorPos.X
-					dec esi ; move buffer position back as well
+			cmove bx, negOne
+			cmp eax, 04dh ; right arrow
+			cmove bx, posOne
 
-				cursorY:
-				mov ax, consoleInfo.dwCursorPosition.Y
-				mov cursorPos.Y, ax
+			cmp cursorPos.X, 0
+			cmovle bx,zero ; if x <= 0, don't move cursor/buffer at all
+			add cursorPos.X, bx
+			movsx ebx,bx
+			add esi, ebx ; move buffer position as well
 
-				INVOKE SetConsoleCursorPosition, outHandle, cursorPos
-				jmp endofloop
+			INVOKE SetConsoleCursorPosition, outHandle, cursorPos
+			jmp endofloop
 
 		checkcharbound:
 		cmp eax, 20h ; lower ascii bound of printable characters

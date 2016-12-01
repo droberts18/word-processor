@@ -12,9 +12,14 @@ lineLength = 50
 buffer BYTE lineLength DUP(?)
 name1 BYTE "thisname", 0
 fileHandle HANDLE ?
+outHandle HANDLE ?
+consoleInfo CONSOLE_SCREEN_BUFFER_INFO < > 
+cursorPos COORD < >
 
 .code
 asmMain proc C
+	INVOKE GetStdHandle, STD_OUTPUT_HANDLE
+	mov outHandle, eax
 	mov esi, 0
 	
 	L1:
@@ -22,7 +27,23 @@ asmMain proc C
 		cmp eax, 0e0h ; placed in buffer when arrow key pressed
 		jne checkcharbound
 			call getch ; additional char needs to be flushed out
-			jmp endofloop
+			cmp eax, 04bh ; left arrow
+			jne endofloop
+				; if left arrow, move cursor left
+				INVOKE GetConsoleScreenBufferInfo, outHandle, ADDR consoleInfo
+				mov ax, consoleInfo.dwCursorPosition.X
+				mov cursorPos.X, ax
+				cmp cursorPos.X, 0
+				jle cursorY ; if zero or less, don't move the cursor back
+					dec cursorPos.X
+					dec esi ; move buffer position back as well
+
+				cursorY:
+				mov ax, consoleInfo.dwCursorPosition.Y
+				mov cursorPos.Y, ax
+
+				INVOKE SetConsoleCursorPosition, outHandle, cursorPos
+				jmp endofloop
 
 		checkcharbound:
 		cmp eax, 20h ; lower ascii bound of printable characters

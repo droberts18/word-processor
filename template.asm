@@ -17,7 +17,6 @@ consoleInfo CONSOLE_SCREEN_BUFFER_INFO < >
 cursorPos COORD < >
 negOne WORD -1
 posOne WORD 1
-zero WORD 0
 
 .code
 asmMain proc C
@@ -42,14 +41,12 @@ asmMain proc C
 			cmp eax, 04dh ; right arrow
 			cmove bx, posOne
 
-			cmp cursorPos.X, 0
-			cmovle bx,zero ; if x <= 0, don't move cursor/buffer at all
 			add cursorPos.X, bx
 			movsx ebx,bx
 			add esi, ebx ; move buffer position as well
 
 			INVOKE SetConsoleCursorPosition, outHandle, cursorPos
-			jmp endofloop
+			jmp zerocheckesi
 
 		checkcharbound:
 		cmp eax, 20h ; lower ascii bound of printable characters
@@ -59,6 +56,11 @@ asmMain proc C
 			call WriteChar
 			mov buffer[esi], al
 			add esi, 1
+
+		zerocheckesi:
+			cmp esi, 0
+			jg endofloop
+			xor esi,esi
 		
 		endofloop:
 			cmp esi, lineLength

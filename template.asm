@@ -9,7 +9,7 @@ getch PROTO C
 lineLength = 50
 
 .data
-buffer BYTE lineLength DUP(?)
+buffer BYTE lineLength DUP(20h)
 name1 BYTE "thisname", 0
 fileHandle HANDLE ?
 outHandle HANDLE ?

@@ -16,10 +16,8 @@ fileHandle HANDLE ?
 .code
 asmMain proc C
 	mov esi, 0
-	mov ecx, lineLength
 	
 	L1:
-		push ecx
 		call getch
 		cmp eax, 0e0h ; placed in buffer when arrow key pressed
 		jne checkcharbound
@@ -34,11 +32,12 @@ asmMain proc C
 			call WriteChar
 			mov buffer[esi], al
 			add esi, 1
-
+		
 		endofloop:
-		pop ecx
-		loop L1
+			cmp esi, lineLength
+			jl L1
 
+	call Crlf
 	mov edx, OFFSET name1
 	call CreateOutputFile
 	mov fileHandle, eax

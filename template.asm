@@ -17,6 +17,7 @@ consoleInfo CONSOLE_SCREEN_BUFFER_INFO < >
 cursorPos COORD < >
 negOne WORD -1
 posOne WORD 1
+backspaceStr BYTE 08h," ",08h,0
 
 .code
 asmMain proc C
@@ -26,6 +27,14 @@ asmMain proc C
 	
 	L1:
 		call getch
+		cmp eax, 08h ; backspace
+		jne arrowkeys
+			dec esi
+			mov edx, OFFSET backspaceStr
+			call WriteString
+			jmp zerocheckesi
+
+		arrowkeys:
 		cmp eax, 0e0h ; placed in buffer when arrow key pressed
 		jne checkcharbound
 			INVOKE GetConsoleScreenBufferInfo, outHandle, ADDR consoleInfo

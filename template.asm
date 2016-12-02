@@ -24,6 +24,19 @@ format BYTE "------------------------------------------------------", 0
 lineCount BYTE 0
 
 .code
+ResetBuffer proc
+	pushad
+	mov ecx, lineLength
+	mov esi, 0
+	L2:
+		mov buffer[esi], 20h
+		inc esi
+		loop L2
+	popad
+	ret
+ResetBuffer endp
+
+
 asmMain proc C
 	call Crlf
 	mov edx, OFFSET name1
@@ -152,12 +165,8 @@ asmMain proc C
 	mov edx, OFFSET buffer
 	mov ecx, lineLength+2
 	call WriteToFile
-	mov ecx, lineLength
-	mov esi, 0
-	L2:
-		mov buffer[esi], 20h
-		inc esi
-		loop L2
+	call ResetBuffer
+	
 
 	mov esi, 0
 	jmp L1

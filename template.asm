@@ -24,6 +24,19 @@ format BYTE "------------------------------------------------------", 0
 lineCount BYTE 0
 
 .code
+; writes the current line to file and resets the buffer
+MakeNewLine proc
+	call Crlf
+	inc lineCount
+	mov eax, fileHandle
+	mov edx, OFFSET buffer
+	mov ecx, lineLength+2 ; allow for crlf at end of buffer
+	call WriteToFile
+	call ResetBuffer
+	ret
+MakeNewLine endp
+
+; resets the buffer to hold all spaces
 ResetBuffer proc
 	pushad
 	mov ecx, lineLength
@@ -59,11 +72,16 @@ asmMain proc C
 		INVOKE SetConsoleCursorInfo, outHandle, ADDR cursorInfo
 		call getch
 
-		cmp eax, 0Dh
-		je newLine
+		newline:
+			cmp eax, 0Dh
+			jne caret
+			call MakeNewLine			
+			mov esi, 0
+			jmp L1
 
-		cmp eax, 5Eh ; caret key
-		jne backspace
+		caret:
+			cmp eax, 5Eh ; caret key
+			jne backspace
 
 		mov cursorInfo.dwSize, 100
 		INVOKE SetConsoleCursorInfo, outHandle, ADDR cursorInfo
@@ -155,21 +173,11 @@ asmMain proc C
 		endofloop:
 			cmp esi, lineLength
 			jl L1
-
-	newLine:
-		call Crlf
-		inc lineCount
 		
-
-	mov eax, fileHandle
-	mov edx, OFFSET buffer
-	mov ecx, lineLength+2
-	call WriteToFile
-	call ResetBuffer
-	
-
+	call MakeNewLine
 	mov esi, 0
 	jmp L1
+	
 
 	save:
 		mov eax, fileHandle

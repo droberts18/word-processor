@@ -24,6 +24,41 @@ format BYTE "------------------------------------------------------", 0
 lineCount BYTE 0
 
 .code
+; takes color input after caret is pressed
+TakeColorInput proc
+	pushad
+	blueT:
+		cmp eax, 62h
+		jne greenT
+		mov eax, lightCyan
+		call SetTextColor
+		jmp finish
+
+	greenT:
+		cmp eax, 67h
+		jne redT
+		mov eax, green
+		call SetTextColor
+		jmp finish
+
+	redT:
+		cmp eax, 72h
+		jne lightGrayT
+		mov eax, lightRed
+		call SetTextColor
+		jmp finish
+
+	lightGrayT:
+		cmp eax, 6Ch
+		jne finish
+		mov eax, lightGray
+		call SetTextColor
+
+	finish: 
+		popad
+		ret
+TakeColorInput endp
+
 ; writes the current line to file and resets the buffer
 MakeNewLine proc
 	call Crlf
@@ -82,47 +117,16 @@ asmMain proc C
 		caret:
 			cmp eax, 5Eh ; caret key
 			jne backspace
-
 			mov cursorInfo.dwSize, 100
 			INVOKE SetConsoleCursorInfo, outHandle, ADDR cursorInfo
 			call getch
-			cmp eax, 5Eh
+			cmp eax, 5Eh ; caret again - return to normal functioning
 			je L1
 
-			cmp eax, 73h
+			cmp eax, 73h ; s - save and quit
 			je save
-
-			cmp eax, 62h
-			je blueT
-
-			cmp eax, 67h
-			je greenT
-
-			cmp eax, 72h
-			je redT
-
-			cmp eax, 6Ch
-			je lightGrayT
-
-			blueT:
-				mov eax, lightCyan
-				call SetTextColor
-				jmp L1
-
-			greenT:
-				mov eax, green
-				call SetTextColor
-				jmp L1
-
-			redT:
-				mov eax, lightRed
-				call SetTextColor
-				jmp L1
-
-			lightGrayT:
-				mov eax, lightGray
-				call SetTextColor
-				jmp L1
+			call TakeColorInput ; otherwise check for colors
+			jmp L1
 
 		backspace:
 			cmp eax, 08h ; backspace

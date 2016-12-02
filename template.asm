@@ -83,46 +83,46 @@ asmMain proc C
 			cmp eax, 5Eh ; caret key
 			jne backspace
 
-		mov cursorInfo.dwSize, 100
-		INVOKE SetConsoleCursorInfo, outHandle, ADDR cursorInfo
-		call getch
-		cmp eax, 5Eh
-		je L1
+			mov cursorInfo.dwSize, 100
+			INVOKE SetConsoleCursorInfo, outHandle, ADDR cursorInfo
+			call getch
+			cmp eax, 5Eh
+			je L1
 
-		cmp eax, 73h
-		je save
+			cmp eax, 73h
+			je save
 
-		cmp eax, 62h
-		je blueT
+			cmp eax, 62h
+			je blueT
 
-		cmp eax, 67h
-		je greenT
+			cmp eax, 67h
+			je greenT
 
-		cmp eax, 72h
-		je redT
+			cmp eax, 72h
+			je redT
 
-		cmp eax, 6Ch
-		je lightGrayT
+			cmp eax, 6Ch
+			je lightGrayT
 
-		blueT:
-			mov eax, lightCyan
-			call SetTextColor
-			jmp L1
+			blueT:
+				mov eax, lightCyan
+				call SetTextColor
+				jmp L1
 
-		greenT:
-			mov eax, green
-			call SetTextColor
-			jmp L1
+			greenT:
+				mov eax, green
+				call SetTextColor
+				jmp L1
 
-		redT:
-			mov eax, lightRed
-			call SetTextColor
-			jmp L1
+			redT:
+				mov eax, lightRed
+				call SetTextColor
+				jmp L1
 
-		lightGrayT:
-			mov eax, lightGray
-			call SetTextColor
-			jmp L1
+			lightGrayT:
+				mov eax, lightGray
+				call SetTextColor
+				jmp L1
 
 		backspace:
 			cmp eax, 08h ; backspace

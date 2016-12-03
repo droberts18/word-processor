@@ -7,6 +7,7 @@ getche PROTO C
 getch PROTO C
 
 lineLength = 50
+numOfHeadingLines = 2
 
 .data
 buffer BYTE lineLength DUP(20h), 0Dh, 0Ah
@@ -22,6 +23,8 @@ backspaceStr BYTE 08h," ",08h,0
 commands BYTE "^s = SAVE, ^b = BLUE, ^g = GREEN, ^r = RED, ^l = LIGHT GRAY(DEFAULT)", 0
 format BYTE "------------------------------------------------------", 0
 lineCount BYTE 0
+windowHeight WORD ?
+bytesRead DWORD ?
 
 .code
 ; takes color input after caret is pressed
@@ -152,14 +155,17 @@ asmMain proc C
 		arrowkeys:
 		cmp eax, 0e0h ; placed in buffer when arrow key pressed
 		jne checkcharbound
+			; get cursor info and height of window
 			INVOKE GetConsoleScreenBufferInfo, outHandle, ADDR consoleInfo
 			mov ax, consoleInfo.dwCursorPosition.X
 			mov cursorPos.X, ax
 			mov ax, consoleInfo.dwCursorPosition.Y
 			mov cursorPos.Y, ax
+			mov ax, consoleInfo.srWindow.Bottom
+			mov windowHeight, ax
 
 			call getch ; additional char needs to be flushed out
-			mov ebx, 0 ; ebx holds amount to move cursor
+			mov ebx, 0 ; ebx holds amount to move cursor on the x axis
 			cmp eax, 04bh ; left arrow
 			cmove bx, negOne
 			cmp eax, 04dh ; right arrow
@@ -169,7 +175,47 @@ asmMain proc C
 			movsx ebx,bx
 			add esi, ebx ; move buffer position as well
 
+			mov ebx,0
+			cmp eax, 048h ; up arrow
+			cmove bx, negOne
+			cmp eax, 050h ; down arrow
+			cmove bx, posOne
+
+			add cursorPos.Y, bx
+
+			checkcursormin:
+			; prevent cursor from moving up into the heading
+			cmp cursorPos.Y, numOfHeadingLines + 1
+			jge checkcursormax
+			mov cursorPos.Y, numOfHeadingLines + 1
+			xor bx, bx
+
+			checkcursormax:
+			; prevent cursor from moving down too far
+			mov ax, windowHeight
+			cmp cursorPos.Y, ax
+			jle finishCursor
+			mov cursorPos.Y, ax
+			xor bx, bx
+
+			finishcursor:
+			; set before changing lineCount so it writes to the start of current line
+			call SetFilePointerPosition
+			movsx ebx, bx
+			add lineCount, bl
+
+			; set the cursor position
 			INVOKE SetConsoleCursorPosition, outHandle, cursorPos
+			; save the current line to file
+			mov eax, fileHandle
+			mov edx, OFFSET buffer
+			mov ecx, lineLength + 2
+			call WriteToFile
+
+			; read the new line into the buffer
+			call ResetBuffer
+			call SetFilePointerPosition
+			INVOKE ReadFile, fileHandle, ADDR buffer, lineLength, ADDR bytesRead, NULL
 			jmp zerocheckesi
 
 		checkcharbound:

@@ -11,7 +11,7 @@ numOfHeadingLines = 2
 
 .data
 buffer BYTE lineLength DUP(20h), 0Dh, 0Ah
-name1 BYTE "thisname", 0
+filename BYTE "thisname", 0
 fileHandle HANDLE ?
 outHandle HANDLE ?
 consoleInfo CONSOLE_SCREEN_BUFFER_INFO < > 
@@ -103,7 +103,7 @@ ResetBuffer endp
 
 asmMain proc C
 	call Crlf
-	INVOKE CreateFile, ADDR name1, GENERIC_READ + GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0
+	INVOKE CreateFile, ADDR filename, GENERIC_READ + GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0
 	mov fileHandle, eax
 
 	INVOKE GetStdHandle, STD_OUTPUT_HANDLE

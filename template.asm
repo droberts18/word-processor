@@ -8,6 +8,7 @@ getch PROTO C
 
 lineLength = 50			; constant for number of chars in line
 numOfHeadingLines = 2	; number of header lines initially written to console
+tabSize = 3				; number of spaces equivalent to tab
 
 .data
 buffer BYTE lineLength DUP(20h), 0Dh, 0Ah	; holds each individual line
@@ -109,6 +110,28 @@ ResetBuffer proc
 	ret
 ResetBuffer endp
 
+; writes a tab to the screen (see tabSize constant)
+; if the end of the line is reached, it stops printing spaces
+; receives: ESI = current line position
+; returns: updated value of ESI
+MakeTab proc
+	push ecx
+	push eax
+	mov ecx, tabSize
+	tabs:
+		mov eax, 20h
+		call WriteChar
+		mov buffer[esi], al
+		inc esi
+		cmp esi, lineLength
+		jge finish
+		loop tabs
+	finish: 
+	pop ecx
+	pop eax
+	ret
+MakeTab endp
+
 asmMain proc C
 	call Crlf
 	INVOKE CreateFile, ADDR filename, GENERIC_READ + GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0
@@ -132,10 +155,15 @@ asmMain proc C
 
 		newline:
 			cmp eax, 0Dh
-			jne caret
+			jne tabKey
 			call MakeNewLine			
 			mov esi, 0
 			jmp L1
+
+		tabKey:
+			cmp eax, 09h
+			jne caret
+			call MakeTab
 
 		caret:
 			cmp eax, 5Eh ; caret key

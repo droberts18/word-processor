@@ -59,9 +59,23 @@ TakeColorInput proc
 		ret
 TakeColorInput endp
 
+; sets file pointer position based on current value of line count
+; so that the file pointer is set to the beginning of whatever line we're on
+SetFilePointerPosition proc
+	pushad
+	mov ebx, lineLength + 2
+	mov eax, 0
+	mov al, lineCount
+	mul ebx
+	INVOKE SetFilePointer, fileHandle, eax, NULL, FILE_BEGIN
+	popad
+	ret
+SetFilePointerPosition endp
+
 ; writes the current line to file and resets the buffer
 MakeNewLine proc
 	call Crlf
+	call SetFilePointerPosition
 	inc lineCount
 	mov eax, fileHandle
 	mov edx, OFFSET buffer
@@ -184,6 +198,7 @@ asmMain proc C
 	
 
 	save:
+		call SetFilePointerPosition
 		mov eax, fileHandle
 		mov edx, OFFSET buffer
 		mov ecx, lineLength+2

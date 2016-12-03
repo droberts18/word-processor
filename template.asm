@@ -6,25 +6,33 @@ INCLUDE Irvine32.inc
 getche PROTO C
 getch PROTO C
 
-lineLength = 50
-numOfHeadingLines = 2
+lineLength = 50			; constant for number of chars in line
+numOfHeadingLines = 2	; number of header lines initially written to console
 
 .data
-buffer BYTE lineLength DUP(20h), 0Dh, 0Ah
-filename BYTE "thisname", 0
+buffer BYTE lineLength DUP(20h), 0Dh, 0Ah	; holds each individual line
+filename BYTE "thisname", 0					; name of file to read/write
 fileHandle HANDLE ?
 outHandle HANDLE ?
+
+; receives info about the console/cursor
 consoleInfo CONSOLE_SCREEN_BUFFER_INFO < > 
 cursorPos COORD < >
 cursorInfo CONSOLE_CURSOR_INFO <25,1>
+windowHeight WORD ?
+
+; used for move optimizations
 negOne WORD -1
 posOne WORD 1
-backspaceStr BYTE 08h," ",08h,0
+
+backspaceStr BYTE 08h," ",08h,0 ; written when backspace key pressed
+
+; header lines
 commands BYTE "^s = SAVE, ^b = BLUE, ^g = GREEN, ^r = RED, ^l = LIGHT GRAY(DEFAULT)", 0
 format BYTE "------------------------------------------------------", 0
+
 lineCount BYTE 0
-windowHeight WORD ?
-bytesRead DWORD ?
+bytesRead DWORD ? ; used when reading from file
 
 .code
 ; takes color input after caret is pressed

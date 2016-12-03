@@ -98,11 +98,9 @@ ResetBuffer proc
 	ret
 ResetBuffer endp
 
-
 asmMain proc C
 	call Crlf
-	mov edx, OFFSET name1
-	call CreateOutputFile
+	INVOKE CreateFile, ADDR name1, GENERIC_READ + GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0
 	mov fileHandle, eax
 
 	INVOKE GetStdHandle, STD_OUTPUT_HANDLE

@@ -94,6 +94,8 @@ MakeNewLine proc
 	mov ecx, lineLength+2 ; allow for crlf at end of buffer
 	call WriteToFile
 	call ResetBuffer
+	call SetFilePointerPosition
+	INVOKE ReadFile, fileHandle, ADDR buffer, lineLength, ADDR bytesRead, NULL
 	ret
 MakeNewLine endp
 

@@ -205,7 +205,16 @@ asmMain proc C
 			call getch ; additional char needs to be flushed out
 			mov ebx, 0 ; ebx holds amount to move cursor on the x axis
 			cmp eax, 04bh ; left arrow
-			cmove bx, negOne
+			jne checkright
+				mov bx, negOne
+				cmp cursorPos.X, 0
+				jne checkright			; if we're already on the left
+				mov eax, 048h			; act like the up arrow was pressed
+				mov bx, 0
+				cmp cursorPos.Y, numOfHeadingLines + 1
+				je checkright			; if we're not on the top line
+				mov bx, lineLength - 1	; move the cursor to the end of the line
+			checkright:
 			cmp eax, 04dh ; right arrow
 			cmove bx, posOne
 

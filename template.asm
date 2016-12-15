@@ -137,6 +137,33 @@ MakeTab proc
 	ret
 MakeTab endp
 
+; reads data from a file and prints it to the screen
+; overwrites whatever is already on screen
+; receives: fileHandle = handle to desired file
+LoadFromFile proc
+	INVOKE SetFilePointer, fileHandle, 0, NULL, FILE_BEGIN
+	mov eax, lightGray
+	call SetTextColor
+
+	mov cursorPos.X, 0
+	mov cursorPos.Y, numOfHeadingLines+1
+
+	Invoke SetConsoleCursorPosition, outHandle, cursorPos
+	mov lineCount, 0
+
+	readBytes:
+		INVOKE ReadFile, fileHandle, ADDR buffer, lineLength+2, ADDR bytesRead, NULL
+		cmp bytesRead, 0
+		je endOfProc
+		mov edx, OFFSET buffer
+		call WriteString
+		add lineCount, 1
+		jmp readBytes
+
+	endOfProc: ret
+
+LoadFromFile endp
+
 asmMain proc C
 	call Crlf
 	INVOKE CreateFile, ADDR filename, GENERIC_READ + GENERIC_WRITE, 0, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0
@@ -153,7 +180,7 @@ asmMain proc C
 	call WriteString
 	call Crlf
 
-	jmp readBytes
+	call LoadFromFile
 	call ResetBuffer
 
 	L1:
@@ -184,9 +211,13 @@ asmMain proc C
 
 			cmp eax, 73h ; s - save and quit
 			je save
-			cmp eax, 6Ch
+			cmp eax, 6Ch ; l - load file
 			je load
 			call TakeColorInput ; otherwise check for colors
+			jmp L1
+		
+		load:
+			call LoadFromFile
 			jmp L1
 
 		backspace:
@@ -305,32 +336,7 @@ asmMain proc C
 		call CloseFile
 		jmp finishProgram
 
-	load:
-		;mov edx, OFFSET enterFilename
-		;call WriteString
-		INVOKE SetFilePointer, fileHandle, 0, NULL, FILE_BEGIN
-		mov eax, lightGray
-		call SetTextColor
-
-		mov cursorPos.X, 0
-		mov cursorPos.Y, numOfHeadingLines+1
-
-		Invoke SetConsoleCursorPosition, outHandle, cursorPos
-		mov lineCount, 0
-
-		readBytes:
-			INVOKE ReadFile, fileHandle, ADDR buffer, lineLength+2, ADDR bytesRead, NULL
-			cmp bytesRead, 0
-			je L1
-			mov edx, OFFSET buffer
-			call WriteString
-			add lineCount, 1
-			jmp readBytes
-
-
-
 	finishProgram:
-	
-	ret
+		ret
 asmMain endp
 end

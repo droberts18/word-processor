@@ -1,4 +1,4 @@
-Microsoft (R) Macro Assembler Version 14.00.24210.0	    12/01/16 15:32:37
+Microsoft (R) Macro Assembler Version 14.00.24210.0	    12/15/16 10:03:00
 template.asm						     Page 1 - 1
 
 
@@ -27,41 +27,53 @@ template.asm						     Page 1 - 1
 				getche PROTO C
 				getch PROTO C
 
- = 00000032			lineLength = 50
+ = 00000032			lineLength = 50			; constant for number of chars in line
+ = 00000002			numOfHeadingLines = 2	; number of header lines initially written to console
+ = 00000003			tabSize = 3				; number of spaces equivalent to tab
 
  00000000			.data
- 00000000  00000032 [		buffer BYTE lineLength DUP(20h), 0Dh, 0Ah
+ 00000000  00000032 [		buffer BYTE lineLength DUP(20h), 0Dh, 0Ah, 0	; holds each individual line
 	    20
-	   ] 0D 0A
- 00000034 74 68 69 73 6E	name1 BYTE "thisname", 0
+	   ] 0D 0A 00
+ 00000035 74 68 69 73 6E	filename BYTE "thisname", 0					; name of file to read/write
 	   61 6D 65 00
- 0000003D 00000000		fileHandle HANDLE ?
- 00000041 00000000		outHandle HANDLE ?
- 00000045 0000 0000 0000	consoleInfo CONSOLE_SCREEN_BUFFER_INFO < > 
+ 0000003E 00000000		fileHandle HANDLE ?
+ 00000042 00000000		outHandle HANDLE ?
+
+				; receives info about the console/cursor
+ 00000046 0000 0000 0000	consoleInfo CONSOLE_SCREEN_BUFFER_INFO < > 
 	   0000 0000 0000
 	   0000 0000 0000
 	   0000 0000
- 0000005B 0000 0000		cursorPos COORD < >
- 0000005F 00000019		cursorInfo CONSOLE_CURSOR_INFO <25,1>
+ 0000005C 0000 0000		cursorPos COORD < >
+ 00000060 00000019		cursorInfo CONSOLE_CURSOR_INFO <25,1>
 	   00000001
- 00000067 FFFF			negOne WORD -1
- 00000069 0001			posOne WORD 1
- 0000006B 08 20 08 00		backspaceStr BYTE 08h," ",08h,0
- 0000006F 5E 73 20 3D 20	commands BYTE "^s = SAVE, ^b = BLUE, ^g = GREEN, ^r = RED, ^l = LIGHT GRAY(DEFAULT)", 0
+ 00000068 0000			windowHeight WORD ?
+
+				; used for move optimizations
+ 0000006A FFFF			negOne WORD -1
+ 0000006C 0001			posOne WORD 1
+
+ 0000006E 08 20 08 00		backspaceStr BYTE 08h," ",08h,0 ; written when backspace key pressed
+
+				; header lines
+ 00000072 5E 73 20 3D 20	commands BYTE "^s = SAVE, ^l = LOAD, ^b = BLUE, ^g = GREEN, ^r = RED, ^d = DEFAULT(LIGHT GRAY)", 0
 	   53 41 56 45 2C
-	   20 5E 62 20 3D
-	   20 42 4C 55 45
-	   2C 20 5E 67 20
-	   3D 20 47 52 45
-	   45 4E 2C 20 5E
-	   72 20 3D 20 52
-	   45 44 2C 20 5E
-	   6C 20 3D 20 4C
-	   49 47 48 54 20
-	   47 52 41 59 28
+	   20 5E 6C 20 3D
+	   20 4C 4F 41 44
+	   2C 20 5E 62 20
+	   3D 20 42 4C 55
+	   45 2C 20 5E 67
+	   20 3D 20 47 52
+	   45 45 4E 2C 20
+	   5E 72 20 3D 20
+	   52 45 44 2C 20
+	   5E 64 20 3D 20
 	   44 45 46 41 55
-	   4C 54 29 00
- 000000B4 2D 2D 2D 2D 2D	format BYTE "------------------------------------------------------", 0
+	   4C 54 28 4C 49
+	   47 48 54 20 47
+	   52 41 59 29 00
+ 000000C2 2D 2D 2D 2D 2D	format BYTE "------------------------------------------------------", 0
 	   2D 2D 2D 2D 2D
 	   2D 2D 2D 2D 2D
 	   2D 2D 2D 2D 2D
@@ -72,183 +84,403 @@ template.asm						     Page 1 - 1
 	   2D 2D 2D 2D 2D
 	   2D 2D 2D 2D 2D
 	   2D 2D 2D 2D 00
- 000000EB 00			lineCount BYTE 0
+
+				; prompt to enter filename to load
+ 000000F9 50 6C 65 61 73	enterFilename BYTE "Please enter the name of the file you wish to load: ", 0
+	   65 20 65 6E 74
+	   65 72 20 74 68
+	   65 20 6E 61 6D
+	   65 20 6F 66 20
+	   74 68 65 20 66
+	   69 6C 65 20 79
+	   6F 75 20 77 69
+	   73 68 20 74 6F
+	   20 6C 6F 61 64
+	   3A 20 00
+
+ 0000012E 00			lineCount BYTE 0
+ 0000012F 00000000		bytesRead DWORD ? ; used when reading from file
 
  00000000			.code
- 00000000			asmMain proc C
- 00000000  E8 00000000 E		call Crlf
- 00000005  BA 00000034 R		mov edx, OFFSET name1
- 0000000A  E8 00000000 E		call CreateOutputFile
- 0000000F  A3 0000003D R		mov fileHandle, eax
+				; takes color input after caret is pressed
+ 00000000			TakeColorInput proc
+ 00000000  60				pushad
+ 00000001				blueT:
+ 00000001  83 F8 62				cmp eax, 62h
+ 00000004  75 0C				jne greenT
+ 00000006  B8 0000000B				mov eax, lightCyan
+ 0000000B  E8 00000000 E			call SetTextColor
+ 00000010  EB 31				jmp finish
+
+ 00000012				greenT:
+ 00000012  83 F8 67				cmp eax, 67h
+ 00000015  75 0C				jne redT
+ 00000017  B8 00000002				mov eax, green
+ 0000001C  E8 00000000 E			call SetTextColor
+ 00000021  EB 20				jmp finish
+
+ 00000023				redT:
+ 00000023  83 F8 72				cmp eax, 72h
+ 00000026  75 0C				jne default
+ 00000028  B8 0000000C				mov eax, lightRed
+ 0000002D  E8 00000000 E			call SetTextColor
+ 00000032  EB 0F				jmp finish
+
+ 00000034				default:
+ 00000034  83 F8 64				cmp eax, 64h
+ 00000037  75 0A				jne finish
+ 00000039  B8 00000007				mov eax, lightGray
+ 0000003E  E8 00000000 E			call SetTextColor
+
+ 00000043				finish: 
+ 00000043  61					popad
+ 00000044  C3					ret
+ 00000045			TakeColorInput endp
+
+				; sets file pointer position based on current value of line count
+				; so that the file pointer is set to the beginning of whatever line we're on
+ 00000045			SetFilePointerPosition proc
+ 00000045  60				pushad
+ 00000046  BB 00000034			mov ebx, lineLength + 2
+ 0000004B  B8 00000000			mov eax, 0
+ 00000050  A0 0000012E R		mov al, lineCount
+ 00000055  F7 E3			mul ebx
+					INVOKE SetFilePointer, fileHandle, eax, NULL, FILE_BEGIN
+ 00000057  6A 00	   *	    push   +000000000h
+ 00000059  6A 00	   *	    push   +000000000h
+ 0000005B  50		   *	    push   eax
+ 0000005C  FF 35 0000003E R *	    push   fileHandle
+ 00000062  E8 00000000 E   *	    call   SetFilePointer
+ 00000067  61				popad
+ 00000068  C3				ret
+ 00000069			SetFilePointerPosition endp
+
+				; writes the current line to file and resets the buffer
+ 00000069			MakeNewLine proc
+ 00000069  E8 00000000 E		call Crlf
+ 0000006E  E8 FFFFFFD2			call SetFilePointerPosition
+ 00000073  FE 05 0000012E R		inc lineCount
+ 00000079  A1 0000003E R		mov eax, fileHandle
+ 0000007E  BA 00000000 R		mov edx, OFFSET buffer
+ 00000083  B9 00000034			mov ecx, lineLength+2 ; allow for crlf at end of buffer
+ 00000088  E8 00000000 E		call WriteToFile
+ 0000008D  E8 0000001F			call ResetBuffer
+ 00000092  E8 FFFFFFAE			call SetFilePointerPosition
+					INVOKE ReadFile, fileHandle, ADDR buffer, lineLength, ADDR bytesRead, NULL
+ 00000097  6A 00	   *	    push   +000000000h
+ 00000099  68 0000012F R   *	    push   OFFSET bytesRead
+ 0000009E  6A 32	   *	    push   +000000032h
+ 000000A0  68 00000000 R   *	    push   OFFSET buffer
+ 000000A5  FF 35 0000003E R *	    push   fileHandle
+ 000000AB  E8 00000000 E   *	    call   ReadFile
+ 000000B0  C3				ret
+ 000000B1			MakeNewLine endp
+
+				; resets the buffer to hold all spaces
+ 000000B1			ResetBuffer proc
+ 000000B1  60				pushad
+ 000000B2  B9 00000032			mov ecx, lineLength
+ 000000B7  BE 00000000			mov esi, 0
+ 000000BC				L2:
+ 000000BC  C6 86 00000000 R			mov buffer[esi], 20h
+	   20
+ 000000C3  46					inc esi
+ 000000C4  E2 F6				loop L2
+ 000000C6  61				popad
+ 000000C7  C3				ret
+ 000000C8			ResetBuffer endp
+
+				; writes a tab to the screen (see tabSize constant)
+				; if the end of the line is reached, it stops printing spaces
+				; receives: ESI = current line position
+				; returns: updated value of ESI
+ 000000C8			MakeTab proc
+ 000000C8  51				push ecx
+ 000000C9  50				push eax
+ 000000CA  B9 00000003			mov ecx, tabSize
+ 000000CF				tabs:
+ 000000CF  B8 00000020				mov eax, 20h
+ 000000D4  E8 00000000 E			call WriteChar
+ 000000D9  88 86 00000000 R			mov buffer[esi], al
+ 000000DF  46					inc esi
+ 000000E0  83 FE 32				cmp esi, lineLength
+ 000000E3  7D 02				jge finish
+ 000000E5  E2 E8				loop tabs
+ 000000E7				finish: 
+ 000000E7  59				pop ecx
+ 000000E8  58				pop eax
+ 000000E9  C3				ret
+ 000000EA			MakeTab endp
+
+ 000000EA			asmMain proc C
+ 000000EA  E8 00000000 E		call Crlf
+					INVOKE CreateFile, ADDR filename, GENERIC_READ + GENERIC_WRITE, 0, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0
+ 000000EF  6A 00	   *	    push   +000000000h
+ 000000F1  68 00000080	   *	    push   +000000080h
+ 000000F6  6A 04	   *	    push   +000000004h
+ 000000F8  6A 00	   *	    push   +000000000h
+ 000000FA  6A 00	   *	    push   +000000000h
+ 000000FC  68 C0000000	   *	    push   +0C0000000h
+ 00000101  68 00000035 R   *	    push   OFFSET filename
+ 00000106  E8 00000000 E   *	    call   CreateFileA
+ 0000010B  A3 0000003E R		mov fileHandle, eax
 
 					INVOKE GetStdHandle, STD_OUTPUT_HANDLE
- 00000014  6A F5	   *	    push    -00000000Bh
- 00000016  E8 00000000 E   *	    call   GetStdHandle
- 0000001B  A3 00000041 R		mov outHandle, eax
- 00000020  BE 00000000			mov esi, 0
+ 00000110  6A F5	   *	    push    -00000000Bh
+ 00000112  E8 00000000 E   *	    call   GetStdHandle
+ 00000117  A3 00000042 R		mov outHandle, eax
+ 0000011C  BE 00000000			mov esi, 0
 					
- 00000025  BA 0000006F R		mov edx, OFFSET commands
- 0000002A  E8 00000000 E		call WriteString
- 0000002F  E8 00000000 E		call Crlf
- 00000034  BA 000000B4 R		mov edx, OFFSET format
- 00000039  E8 00000000 E		call WriteString
- 0000003E  E8 00000000 E		call Crlf
+ 00000121  BA 00000072 R		mov edx, OFFSET commands
+ 00000126  E8 00000000 E		call WriteString
+ 0000012B  E8 00000000 E		call Crlf
+ 00000130  BA 000000C2 R		mov edx, OFFSET format
+ 00000135  E8 00000000 E		call WriteString
+ 0000013A  E8 00000000 E		call Crlf
 
- 00000043				L1:
- 00000043  C7 05 0000005F R			mov cursorInfo.dwSize, 25
+ 0000013F  E9 00000269			jmp readBytes
+
+ 00000144				L1:
+ 00000144  C7 05 00000060 R			mov cursorInfo.dwSize, 25
 	   00000019
 						INVOKE SetConsoleCursorInfo, outHandle, ADDR cursorInfo
- 0000004D  68 0000005F R   *	    push   OFFSET cursorInfo
- 00000052  FF 35 00000041 R *	    push   outHandle
- 00000058  E8 00000000 E   *	    call   SetConsoleCursorInfo
- 0000005D  E8 00000000 E			call getch
+ 0000014E  68 00000060 R   *	    push   OFFSET cursorInfo
+ 00000153  FF 35 00000042 R *	    push   outHandle
+ 00000159  E8 00000000 E   *	    call   SetConsoleCursorInfo
+ 0000015E  E8 00000000 E			call getch
 
- 00000062  83 F8 0D				cmp eax, 0Dh
- 00000065  0F 84 00000131			je newLine
+ 00000163					newline:
+ 00000163  83 F8 0D					cmp eax, 0Dh
+ 00000166  75 0C					jne tabKey
+ 00000168  E8 FFFFFEFC					call MakeNewLine			
+ 0000016D  BE 00000000					mov esi, 0
+ 00000172  EB D0					jmp L1
 
- 0000006B  83 F8 5E				cmp eax, 5Eh ; caret key
- 0000006E  75 7A				jne backspace
+ 00000174					tabKey:
+ 00000174  83 F8 09					cmp eax, 09h
+ 00000177  75 05					jne caret
+ 00000179  E8 FFFFFF4A					call MakeTab
 
- 00000070  C7 05 0000005F R			mov cursorInfo.dwSize, 100
+ 0000017E					caret:
+ 0000017E  83 F8 5E					cmp eax, 5Eh ; caret key
+ 00000181  75 3D					jne backspace
+ 00000183  C7 05 00000060 R				mov cursorInfo.dwSize, 100
 	   00000064
-						INVOKE SetConsoleCursorInfo, outHandle, ADDR cursorInfo
- 0000007A  68 0000005F R   *	    push   OFFSET cursorInfo
- 0000007F  FF 35 00000041 R *	    push   outHandle
- 00000085  E8 00000000 E   *	    call   SetConsoleCursorInfo
- 0000008A  E8 00000000 E			call getch
- 0000008F  83 F8 5E				cmp eax, 5Eh
- 00000092  74 AF				je L1
+							INVOKE SetConsoleCursorInfo, outHandle, ADDR cursorInfo
+ 0000018D  68 00000060 R   *	    push   OFFSET cursorInfo
+ 00000192  FF 35 00000042 R *	    push   outHandle
+ 00000198  E8 00000000 E   *	    call   SetConsoleCursorInfo
+ 0000019D  E8 00000000 E				call getch
+ 000001A2  83 F8 5E					cmp eax, 5Eh ; caret again - return to normal functioning
+ 000001A5  74 9D					je L1
 
- 00000094  83 F8 73				cmp eax, 73h
- 00000097  0F 84 0000013C			je save
+ 000001A7  83 F8 73					cmp eax, 73h ; s - save and quit
+ 000001AA  0F 84 00000198				je save
+ 000001B0  83 F8 6C					cmp eax, 6Ch
+ 000001B3  0F 84 000001AF				je load
+ 000001B9  E8 FFFFFE42					call TakeColorInput ; otherwise check for colors
+ 000001BE  EB 84					jmp L1
 
- 0000009D  83 F8 62				cmp eax, 62h
- 000000A0  74 0F				je blueT
-
- 000000A2  83 F8 67				cmp eax, 67h
- 000000A5  74 16				je greenT
-
- 000000A7  83 F8 72				cmp eax, 72h
- 000000AA  74 20				je redT
-
- 000000AC  83 F8 6C				cmp eax, 6Ch
- 000000AF  74 2A				je lightGrayT
-
- 000000B1					blueT:
- 000000B1  B8 0000000B					mov eax, lightCyan
- 000000B6  E8 00000000 E				call SetTextColor
- 000000BB  EB 86					jmp L1
-
- 000000BD					greenT:
- 000000BD  B8 00000002					mov eax, green
- 000000C2  E8 00000000 E				call SetTextColor
- 000000C7  E9 FFFFFF77					jmp L1
-
- 000000CC					redT:
- 000000CC  B8 0000000C					mov eax, lightRed
- 000000D1  E8 00000000 E				call SetTextColor
- 000000D6  E9 FFFFFF68					jmp L1
-
- 000000DB					lightGrayT:
- 000000DB  B8 00000007					mov eax, lightGray
- 000000E0  E8 00000000 E				call SetTextColor
- 000000E5  E9 FFFFFF59					jmp L1
-
- 000000EA					backspace:
- 000000EA  83 F8 08					cmp eax, 08h ; backspace
- 000000ED  75 17					jne arrowkeys
- 000000EF  C6 86 00000000 R					mov buffer[esi], 20h
+ 000001C0					backspace:
+ 000001C0  83 F8 08					cmp eax, 08h ; backspace
+ 000001C3  75 17					jne arrowkeys
+ 000001C5  C6 86 00000000 R					mov buffer[esi], 20h
 	   20
- 000000F6  4E							dec esi
- 000000F7  BA 0000006B R					mov edx, OFFSET backspaceStr
- 000000FC  E8 00000000 E					call WriteString
- 00000101  E9 00000086						jmp zerocheckesi
+ 000001CC  4E							dec esi
+ 000001CD  BA 0000006E R					mov edx, OFFSET backspaceStr
+ 000001D2  E8 00000000 E					call WriteString
+ 000001D7  E9 0000014D						jmp zerocheckesi
 
- 00000106					arrowkeys:
- 00000106  3D 000000E0				cmp eax, 0e0h ; placed in buffer when arrow key pressed
- 0000010B  75 67				jne checkcharbound
+ 000001DC					arrowkeys:
+ 000001DC  3D 000000E0				cmp eax, 0e0h ; placed in buffer when arrow key pressed
+ 000001E1  0F 85 0000012A			jne checkcharbound
+							; get cursor info and height of window
 							INVOKE GetConsoleScreenBufferInfo, outHandle, ADDR consoleInfo
- 0000010D  68 00000045 R   *	    push   OFFSET consoleInfo
- 00000112  FF 35 00000041 R *	    push   outHandle
- 00000118  E8 00000000 E   *	    call   GetConsoleScreenBufferInfo
- 0000011D  66| A1					mov ax, consoleInfo.dwCursorPosition.X
-	   00000049 R
- 00000123  66| A3					mov cursorPos.X, ax
-	   0000005B R
- 00000129  66| A1					mov ax, consoleInfo.dwCursorPosition.Y
-	   0000004B R
- 0000012F  66| A3					mov cursorPos.Y, ax
-	   0000005D R
+ 000001E7  68 00000046 R   *	    push   OFFSET consoleInfo
+ 000001EC  FF 35 00000042 R *	    push   outHandle
+ 000001F2  E8 00000000 E   *	    call   GetConsoleScreenBufferInfo
+ 000001F7  66| A1					mov ax, consoleInfo.dwCursorPosition.X
+	   0000004A R
+ 000001FD  66| A3					mov cursorPos.X, ax
+	   0000005C R
+ 00000203  66| A1					mov ax, consoleInfo.dwCursorPosition.Y
+	   0000004C R
+ 00000209  66| A3					mov cursorPos.Y, ax
+	   0000005E R
+ 0000020F  66| A1					mov ax, consoleInfo.srWindow.Bottom
+	   00000056 R
+ 00000215  66| A3					mov windowHeight, ax
+	   00000068 R
 
- 00000135  E8 00000000 E				call getch ; additional char needs to be flushed out
- 0000013A  BB 00000000					mov ebx, 0 ; ebx holds amount to move cursor
- 0000013F  83 F8 4B					cmp eax, 04bh ; left arrow
- 00000142  66| 0F 44 1D					cmove bx, negOne
-	   00000067 R
- 0000014A  83 F8 4D					cmp eax, 04dh ; right arrow
- 0000014D  66| 0F 44 1D					cmove bx, posOne
-	   00000069 R
+ 0000021B  E8 00000000 E				call getch ; additional char needs to be flushed out
+ 00000220  BB 00000000					mov ebx, 0 ; ebx holds amount to move cursor on the x axis
+ 00000225  83 F8 4B					cmp eax, 04bh ; left arrow
+ 00000228  75 28					jne checkright
+ 0000022A  66| 8B 1D						mov bx, negOne
+	   0000006A R
+ 00000231  66| 83 3D						cmp cursorPos.X, 0
+	   0000005C R 00
+ 00000239  75 17						jne checkright			; if we're already on the left
+ 0000023B  B8 00000048						mov eax, 048h			; act like the up arrow was pressed
+ 00000240  66| BB 0000						mov bx, 0
+ 00000244  66| 83 3D						cmp cursorPos.Y, numOfHeadingLines + 1
+	   0000005E R 03
+ 0000024C  74 04						je checkright			; if we're not on the top line
+ 0000024E  66| BB 0031						mov bx, lineLength - 1	; move the cursor to the end of the line
+ 00000252						checkright:
+ 00000252  83 F8 4D					cmp eax, 04dh ; right arrow
+ 00000255  66| 0F 44 1D					cmove bx, posOne
+	   0000006C R
 
- 00000155  66| 01 1D					add cursorPos.X, bx
-	   0000005B R
- 0000015C  0F BF DB					movsx ebx,bx
- 0000015F  03 F3					add esi, ebx ; move buffer position as well
+ 0000025D  66| 01 1D					add cursorPos.X, bx
+	   0000005C R
+ 00000264  0F BF DB					movsx ebx,bx
+ 00000267  03 F3					add esi, ebx ; move buffer position as well
 
+ 00000269  BB 00000000					mov ebx,0
+ 0000026E  83 F8 48					cmp eax, 048h ; up arrow
+ 00000271  66| 0F 44 1D					cmove bx, negOne
+	   0000006A R
+ 00000279  83 F8 50					cmp eax, 050h ; down arrow
+ 0000027C  66| 0F 44 1D					cmove bx, posOne
+	   0000006C R
+
+ 00000284  66| 01 1D					add cursorPos.Y, bx
+	   0000005E R
+
+ 0000028B						checkcursormin:
+							; prevent cursor from moving up into the heading
+ 0000028B  66| 83 3D					cmp cursorPos.Y, numOfHeadingLines + 1
+	   0000005E R 03
+ 00000293  7D 0C					jge checkcursormax
+ 00000295  66| C7 05					mov cursorPos.Y, numOfHeadingLines + 1
+	   0000005E R
+	   0003
+ 0000029E  66| 33 DB					xor bx, bx
+
+ 000002A1						checkcursormax:
+							; prevent cursor from moving down too far
+ 000002A1  66| A1					mov ax, windowHeight
+	   00000068 R
+ 000002A7  66| 39 05					cmp cursorPos.Y, ax
+	   0000005E R
+ 000002AE  7E 09					jle finishCursor
+ 000002B0  66| A3					mov cursorPos.Y, ax
+	   0000005E R
+ 000002B6  66| 33 DB					xor bx, bx
+
+ 000002B9						finishcursor:
+							; set before changing lineCount so it writes to the start of current line
+ 000002B9  E8 FFFFFD87					call SetFilePointerPosition
+ 000002BE  0F BF DB					movsx ebx, bx
+ 000002C1  00 1D 0000012E R				add lineCount, bl
+
+							; set the cursor position
 							INVOKE SetConsoleCursorPosition, outHandle, cursorPos
- 00000161  FF 35 0000005B R *	    push   dword  ptr cursorPos
- 00000167  FF 35 00000041 R *	    push   outHandle
- 0000016D  E8 00000000 E   *	    call   SetConsoleCursorPosition
- 00000172  EB 18					jmp zerocheckesi
+ 000002C7  FF 35 0000005C R *	    push   dword  ptr cursorPos
+ 000002CD  FF 35 00000042 R *	    push   outHandle
+ 000002D3  E8 00000000 E   *	    call   SetConsoleCursorPosition
+							; save the current line to file
+ 000002D8  A1 0000003E R				mov eax, fileHandle
+ 000002DD  BA 00000000 R				mov edx, OFFSET buffer
+ 000002E2  B9 00000034					mov ecx, lineLength + 2
+ 000002E7  E8 00000000 E				call WriteToFile
 
- 00000174					checkcharbound:
- 00000174  83 F8 20				cmp eax, 20h ; lower ascii bound of printable characters
- 00000177  7C 1A				jl endofloop
- 00000179  83 F8 7E				cmp eax, 7eh ; upper ascii bound of printable characters
- 0000017C  7F 15				jg endofloop
- 0000017E  E8 00000000 E				call WriteChar
- 00000183  88 86 00000000 R				mov buffer[esi], al
- 00000189  83 C6 01					add esi, 1
+							; read the new line into the buffer
+ 000002EC  E8 FFFFFDC0					call ResetBuffer
+ 000002F1  E8 FFFFFD4F					call SetFilePointerPosition
+							INVOKE ReadFile, fileHandle, ADDR buffer, lineLength, ADDR bytesRead, NULL
+ 000002F6  6A 00	   *	    push   +000000000h
+ 000002F8  68 0000012F R   *	    push   OFFSET bytesRead
+ 000002FD  6A 32	   *	    push   +000000032h
+ 000002FF  68 00000000 R   *	    push   OFFSET buffer
+ 00000304  FF 35 0000003E R *	    push   fileHandle
+ 0000030A  E8 00000000 E   *	    call   ReadFile
+ 0000030F  EB 18					jmp zerocheckesi
 
- 0000018C					zerocheckesi:
- 0000018C  83 FE 00					cmp esi, 0
- 0000018F  7F 02					jg endofloop
- 00000191  33 F6					xor esi,esi
+ 00000311					checkcharbound:
+ 00000311  83 F8 20				cmp eax, 20h ; lower ascii bound of printable characters
+ 00000314  7C 1A				jl endofloop
+ 00000316  83 F8 7E				cmp eax, 7eh ; upper ascii bound of printable characters
+ 00000319  7F 15				jg endofloop
+ 0000031B  E8 00000000 E				call WriteChar
+ 00000320  88 86 00000000 R				mov buffer[esi], al
+ 00000326  83 C6 01					add esi, 1
+
+ 00000329					zerocheckesi:
+ 00000329  83 FE 00					cmp esi, 0
+ 0000032C  7F 02					jg endofloop
+ 0000032E  33 F6					xor esi,esi
 						
- 00000193					endofloop:
- 00000193  83 FE 32					cmp esi, lineLength
- 00000196  0F 8C FFFFFEA7				jl L1
-
- 0000019C				newLine:
- 0000019C  E8 00000000 E			call Crlf
- 000001A1  FE 05 000000EB R			inc lineCount
+ 00000330					endofloop:
+ 00000330  83 FE 32					cmp esi, lineLength
+ 00000333  0F 8C FFFFFE0B				jl L1
 						
+ 00000339  E8 FFFFFD2B			call MakeNewLine
+ 0000033E  BE 00000000			mov esi, 0
+ 00000343  E9 FFFFFDFC			jmp L1
+					
 
- 000001A7  A1 0000003D R		mov eax, fileHandle
- 000001AC  BA 00000000 R		mov edx, OFFSET buffer
- 000001B1  B9 00000034			mov ecx, lineLength+2
- 000001B6  E8 00000000 E		call WriteToFile
- 000001BB  B9 00000032			mov ecx, lineLength
- 000001C0  BE 00000000			mov esi, 0
- 000001C5				L2:
- 000001C5  C6 86 00000000 R			mov buffer[esi], 20h
-	   20
- 000001CC  46					inc esi
- 000001CD  E2 F6				loop L2
+ 00000348				save:
+ 00000348  E8 FFFFFCF8				call SetFilePointerPosition
+ 0000034D  A1 0000003E R			mov eax, fileHandle
+ 00000352  BA 00000000 R			mov edx, OFFSET buffer
+ 00000357  B9 00000034				mov ecx, lineLength+2
+ 0000035C  E8 00000000 E			call WriteToFile
+ 00000361  E8 00000000 E			call CloseFile
+ 00000366  EB 7E				jmp finishProgram
 
- 000001CF  BE 00000000			mov esi, 0
- 000001D4  E9 FFFFFE6A			jmp L1
+ 00000368				load:
+						;mov edx, OFFSET enterFilename
+						;call WriteString
+						INVOKE SetFilePointer, fileHandle, 0, NULL, FILE_BEGIN
+ 00000368  6A 00	   *	    push   +000000000h
+ 0000036A  6A 00	   *	    push   +000000000h
+ 0000036C  6A 00	   *	    push   +000000000h
+ 0000036E  FF 35 0000003E R *	    push   fileHandle
+ 00000374  E8 00000000 E   *	    call   SetFilePointer
+ 00000379  B8 00000007				mov eax, lightGray
+ 0000037E  E8 00000000 E			call SetTextColor
 
- 000001D9				save:
- 000001D9  A1 0000003D R			mov eax, fileHandle
- 000001DE  BA 00000000 R			mov edx, OFFSET buffer
- 000001E3  B9 00000034				mov ecx, lineLength+2
- 000001E8  E8 00000000 E			call WriteToFile
- 000001ED  E8 00000000 E			call CloseFile
+ 00000383  66| C7 05				mov cursorPos.X, 0
+	   0000005C R
+	   0000
+ 0000038C  66| C7 05				mov cursorPos.Y, numOfHeadingLines+1
+	   0000005E R
+	   0003
 
- 000001F2  C3				ret
- 000001F3			asmMain endp
+						Invoke SetConsoleCursorPosition, outHandle, cursorPos
+ 00000395  FF 35 0000005C R *	    push   dword  ptr cursorPos
+ 0000039B  FF 35 00000042 R *	    push   outHandle
+ 000003A1  E8 00000000 E   *	    call   SetConsoleCursorPosition
+ 000003A6  C6 05 0000012E R			mov lineCount, 0
+	   00
+
+ 000003AD					readBytes:
+							INVOKE ReadFile, fileHandle, ADDR buffer, lineLength+2, ADDR bytesRead, NULL
+ 000003AD  6A 00	   *	    push   +000000000h
+ 000003AF  68 0000012F R   *	    push   OFFSET bytesRead
+ 000003B4  6A 34	   *	    push   +000000034h
+ 000003B6  68 00000000 R   *	    push   OFFSET buffer
+ 000003BB  FF 35 0000003E R *	    push   fileHandle
+ 000003C1  E8 00000000 E   *	    call   ReadFile
+ 000003C6  80 05 0000012E R				add lineCount, 1
+	   01
+ 000003CD  83 3D 0000012F R				cmp bytesRead, 0
+	   00
+ 000003D4  0F 84 FFFFFD6A				je L1
+ 000003DA  BA 00000000 R				mov edx, OFFSET buffer
+ 000003DF  E8 00000000 E				call WriteString
+ 000003E4  EB C7					jmp readBytes
+
+
+
+ 000003E6				finishProgram:
+					
+ 000003E6  C3				ret
+ 000003E7			asmMain endp
 				end
-Microsoft (R) Macro Assembler Version 14.00.24210.0	    12/01/16 15:32:37
+Microsoft (R) Macro Assembler Version 14.00.24210.0	    12/15/16 10:03:00
 template.asm						     Symbols 2 - 1
 
 
@@ -342,8 +574,8 @@ Segments and Groups:
 
 FLAT . . . . . . . . . . . . . .	GROUP
 STACK  . . . . . . . . . . . . .	32 Bit	 00001000 Para	  Stack	  'STACK'	 
-_DATA  . . . . . . . . . . . . .	32 Bit	 000000EC Para	  Public  'DATA'	
-_TEXT  . . . . . . . . . . . . .	32 Bit	 000001F3 Para	  Public  'CODE'	
+_DATA  . . . . . . . . . . . . .	32 Bit	 00000133 Para	  Public  'DATA'	
+_TEXT  . . . . . . . . . . . . .	32 Bit	 000003E7 Para	  Public  'CODE'	
 
 
 Procedures, parameters, and locals:
@@ -391,6 +623,10 @@ HeapFree . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 HeapSize . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 IsDigit  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 LocalFree  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+MakeNewLine  . . . . . . . . . .	P Near	 00000069 _TEXT	Length= 00000048 Public STDCALL
+MakeTab  . . . . . . . . . . . .	P Near	 000000C8 _TEXT	Length= 00000022 Public STDCALL
+  tabs . . . . . . . . . . . . .	L Near	 000000CF _TEXT	
+  finish . . . . . . . . . . . .	L Near	 000000E7 _TEXT	
 MessageBoxA  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 MsgBoxAsk  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 MsgBox . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -413,6 +649,8 @@ ReadInt  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 ReadKeyFlush . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 ReadKey  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 ReadString . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+ResetBuffer  . . . . . . . . . .	P Near	 000000B1 _TEXT	Length= 00000017 Public STDCALL
+  L2 . . . . . . . . . . . . . .	L Near	 000000BC _TEXT	
 SetConsoleCursorInfo . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 SetConsoleCursorPosition . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 SetConsoleMode . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -420,6 +658,7 @@ SetConsoleScreenBufferSize . . .	P Near	 00000000 FLAT	Length= 00000000 External
 SetConsoleTextAttribute  . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 SetConsoleTitleA . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 SetConsoleWindowInfo . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+SetFilePointerPosition . . . . .	P Near	 00000045 _TEXT	Length= 00000024 Public STDCALL
 SetFilePointer . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 SetLocalTime . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 SetTextColor . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -432,6 +671,12 @@ Str_length . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 Str_trim . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 Str_ucase  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 SystemTimeToFileTime . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
+TakeColorInput . . . . . . . . .	P Near	 00000000 _TEXT	Length= 00000045 Public STDCALL
+  blueT  . . . . . . . . . . . .	L Near	 00000001 _TEXT	
+  greenT . . . . . . . . . . . .	L Near	 00000012 _TEXT	
+  redT . . . . . . . . . . . . .	L Near	 00000023 _TEXT	
+  default  . . . . . . . . . . .	L Near	 00000034 _TEXT	
+  finish . . . . . . . . . . . .	L Near	 00000043 _TEXT	
 WaitMsg  . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteBinB  . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteBin . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
@@ -450,20 +695,24 @@ WriteStackFrame  . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External
 WriteString  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteToFile  . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
 WriteWindowsMsg  . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External STDCALL
-asmMain  . . . . . . . . . . . .	P Near	 00000000 _TEXT	Length= 000001F3 Public C
-  L1 . . . . . . . . . . . . . .	L Near	 00000043 _TEXT	
-  blueT  . . . . . . . . . . . .	L Near	 000000B1 _TEXT	
-  greenT . . . . . . . . . . . .	L Near	 000000BD _TEXT	
-  redT . . . . . . . . . . . . .	L Near	 000000CC _TEXT	
-  lightGrayT . . . . . . . . . .	L Near	 000000DB _TEXT	
-  backspace  . . . . . . . . . .	L Near	 000000EA _TEXT	
-  arrowkeys  . . . . . . . . . .	L Near	 00000106 _TEXT	
-  checkcharbound . . . . . . . .	L Near	 00000174 _TEXT	
-  zerocheckesi . . . . . . . . .	L Near	 0000018C _TEXT	
-  endofloop  . . . . . . . . . .	L Near	 00000193 _TEXT	
-  newLine  . . . . . . . . . . .	L Near	 0000019C _TEXT	
-  L2 . . . . . . . . . . . . . .	L Near	 000001C5 _TEXT	
-  save . . . . . . . . . . . . .	L Near	 000001D9 _TEXT	
+asmMain  . . . . . . . . . . . .	P Near	 000000EA _TEXT	Length= 000002FD Public C
+  L1 . . . . . . . . . . . . . .	L Near	 00000144 _TEXT	
+  newline  . . . . . . . . . . .	L Near	 00000163 _TEXT	
+  tabKey . . . . . . . . . . . .	L Near	 00000174 _TEXT	
+  caret  . . . . . . . . . . . .	L Near	 0000017E _TEXT	
+  backspace  . . . . . . . . . .	L Near	 000001C0 _TEXT	
+  arrowkeys  . . . . . . . . . .	L Near	 000001DC _TEXT	
+  checkright . . . . . . . . . .	L Near	 00000252 _TEXT	
+  checkcursormin . . . . . . . .	L Near	 0000028B _TEXT	
+  checkcursormax . . . . . . . .	L Near	 000002A1 _TEXT	
+  finishcursor . . . . . . . . .	L Near	 000002B9 _TEXT	
+  checkcharbound . . . . . . . .	L Near	 00000311 _TEXT	
+  zerocheckesi . . . . . . . . .	L Near	 00000329 _TEXT	
+  endofloop  . . . . . . . . . .	L Near	 00000330 _TEXT	
+  save . . . . . . . . . . . . .	L Near	 00000348 _TEXT	
+  load . . . . . . . . . . . . .	L Near	 00000368 _TEXT	
+  readBytes  . . . . . . . . . .	L Near	 000003AD _TEXT	
+  finishProgram  . . . . . . . .	L Near	 000003E6 _TEXT	
 getche . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External C
 getch  . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External C
 printf . . . . . . . . . . . . .	P Near	 00000000 FLAT	Length= 00000000 External C
@@ -684,19 +933,22 @@ VK_UP  . . . . . . . . . . . . .	Number	 00000026h
 WINDOW_BUFFER_SIZE_EVENT . . . .	Number	 00000004h   
 WriteConsoleOutputCharacter  . .	Text   	 WriteConsoleOutputCharacterA
 WriteConsole . . . . . . . . . .	Text   	 WriteConsoleA
-backspaceStr . . . . . . . . . .	Byte	 0000006B _DATA	
+backspaceStr . . . . . . . . . .	Byte	 0000006E _DATA	
 black  . . . . . . . . . . . . .	Number	 00000000h   
 blue . . . . . . . . . . . . . .	Number	 00000001h   
 brown  . . . . . . . . . . . . .	Number	 00000006h   
 buffer . . . . . . . . . . . . .	Byte	 00000000 _DATA	
-commands . . . . . . . . . . . .	Byte	 0000006F _DATA	
-consoleInfo  . . . . . . . . . .	CONSOLE_SCREEN_BUFFER_INFO  00000045 _DATA	
-cursorInfo . . . . . . . . . . .	CONSOLE_CURSOR_INFO  0000005F _DATA	
-cursorPos  . . . . . . . . . . .	COORD	 0000005B _DATA	
+bytesRead  . . . . . . . . . . .	DWord	 0000012F _DATA	
+commands . . . . . . . . . . . .	Byte	 00000072 _DATA	
+consoleInfo  . . . . . . . . . .	CONSOLE_SCREEN_BUFFER_INFO  00000046 _DATA	
+cursorInfo . . . . . . . . . . .	CONSOLE_CURSOR_INFO  00000060 _DATA	
+cursorPos  . . . . . . . . . . .	COORD	 0000005C _DATA	
 cyan . . . . . . . . . . . . . .	Number	 00000003h   
+enterFilename  . . . . . . . . .	Byte	 000000F9 _DATA	
 exit . . . . . . . . . . . . . .	Text   	 INVOKE ExitProcess,0
-fileHandle . . . . . . . . . . .	DWord	 0000003D _DATA	
-format . . . . . . . . . . . . .	Byte	 000000B4 _DATA	
+fileHandle . . . . . . . . . . .	DWord	 0000003E _DATA	
+filename . . . . . . . . . . . .	Byte	 00000035 _DATA	
+format . . . . . . . . . . . . .	Byte	 000000C2 _DATA	
 gray . . . . . . . . . . . . . .	Number	 00000008h   
 green  . . . . . . . . . . . . .	Number	 00000002h   
 lightBlue  . . . . . . . . . . .	Number	 00000009h   
@@ -705,15 +957,17 @@ lightGray  . . . . . . . . . . .	Number	 00000007h
 lightGreen . . . . . . . . . . .	Number	 0000000Ah   
 lightMagenta . . . . . . . . . .	Number	 0000000Dh   
 lightRed . . . . . . . . . . . .	Number	 0000000Ch   
-lineCount  . . . . . . . . . . .	Byte	 000000EB _DATA	
+lineCount  . . . . . . . . . . .	Byte	 0000012E _DATA	
 lineLength . . . . . . . . . . .	Number	 00000032h   
 magenta  . . . . . . . . . . . .	Number	 00000005h   
-name1  . . . . . . . . . . . . .	Byte	 00000034 _DATA	
-negOne . . . . . . . . . . . . .	Word	 00000067 _DATA	
-outHandle  . . . . . . . . . . .	DWord	 00000041 _DATA	
-posOne . . . . . . . . . . . . .	Word	 00000069 _DATA	
+negOne . . . . . . . . . . . . .	Word	 0000006A _DATA	
+numOfHeadingLines  . . . . . . .	Number	 00000002h   
+outHandle  . . . . . . . . . . .	DWord	 00000042 _DATA	
+posOne . . . . . . . . . . . . .	Word	 0000006C _DATA	
 red  . . . . . . . . . . . . . .	Number	 00000004h   
+tabSize  . . . . . . . . . . . .	Number	 00000003h   
 white  . . . . . . . . . . . . .	Number	 0000000Fh   
+windowHeight . . . . . . . . . .	Word	 00000068 _DATA	
 wsprintf . . . . . . . . . . . .	Text   	 wsprintfA
 yellow . . . . . . . . . . . . .	Number	 0000000Eh   
 

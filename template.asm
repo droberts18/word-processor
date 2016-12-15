@@ -11,7 +11,7 @@ numOfHeadingLines = 2	; number of header lines initially written to console
 tabSize = 3				; number of spaces equivalent to tab
 
 .data
-buffer BYTE lineLength DUP(20h), 0Dh, 0Ah	; holds each individual line
+buffer BYTE lineLength DUP(20h), 0Dh, 0Ah, 0	; holds each individual line
 filename BYTE "thisname", 0					; name of file to read/write
 fileHandle HANDLE ?
 outHandle HANDLE ?
@@ -29,8 +29,11 @@ posOne WORD 1
 backspaceStr BYTE 08h," ",08h,0 ; written when backspace key pressed
 
 ; header lines
-commands BYTE "^s = SAVE, ^b = BLUE, ^g = GREEN, ^r = RED, ^l = LIGHT GRAY(DEFAULT)", 0
+commands BYTE "^s = SAVE, ^l = LOAD, ^b = BLUE, ^g = GREEN, ^r = RED, ^d = DEFAULT(LIGHT GRAY)", 0
 format BYTE "------------------------------------------------------", 0
+
+; prompt to enter filename to load
+enterFilename BYTE "Please enter the name of the file you wish to load: ", 0
 
 lineCount BYTE 0
 bytesRead DWORD ? ; used when reading from file
@@ -55,13 +58,13 @@ TakeColorInput proc
 
 	redT:
 		cmp eax, 72h
-		jne lightGrayT
+		jne default
 		mov eax, lightRed
 		call SetTextColor
 		jmp finish
 
-	lightGrayT:
-		cmp eax, 6Ch
+	default:
+		cmp eax, 64h
 		jne finish
 		mov eax, lightGray
 		call SetTextColor
@@ -136,7 +139,7 @@ MakeTab endp
 
 asmMain proc C
 	call Crlf
-	INVOKE CreateFile, ADDR filename, GENERIC_READ + GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0
+	INVOKE CreateFile, ADDR filename, GENERIC_READ + GENERIC_WRITE, 0, 0, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0
 	mov fileHandle, eax
 
 	INVOKE GetStdHandle, STD_OUTPUT_HANDLE
@@ -149,6 +152,8 @@ asmMain proc C
 	mov edx, OFFSET format
 	call WriteString
 	call Crlf
+
+	jmp readBytes
 
 	L1:
 		mov cursorInfo.dwSize, 25
@@ -178,6 +183,8 @@ asmMain proc C
 
 			cmp eax, 73h ; s - save and quit
 			je save
+			cmp eax, 6Ch
+			je load
 			call TakeColorInput ; otherwise check for colors
 			jmp L1
 
@@ -295,7 +302,34 @@ asmMain proc C
 		mov ecx, lineLength+2
 		call WriteToFile
 		call CloseFile
+		jmp finishProgram
 
+	load:
+		;mov edx, OFFSET enterFilename
+		;call WriteString
+		INVOKE SetFilePointer, fileHandle, 0, NULL, FILE_BEGIN
+		mov eax, lightGray
+		call SetTextColor
+
+		mov cursorPos.X, 0
+		mov cursorPos.Y, numOfHeadingLines+1
+
+		Invoke SetConsoleCursorPosition, outHandle, cursorPos
+		mov lineCount, 0
+
+		readBytes:
+			INVOKE ReadFile, fileHandle, ADDR buffer, lineLength+2, ADDR bytesRead, NULL
+			add lineCount, 1
+			cmp bytesRead, 0
+			je L1
+			mov edx, OFFSET buffer
+			call WriteString
+			jmp readBytes
+
+
+
+	finishProgram:
+	
 	ret
 asmMain endp
 end

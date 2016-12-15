@@ -154,6 +154,7 @@ asmMain proc C
 	call Crlf
 
 	jmp readBytes
+	call ResetBuffer
 
 	L1:
 		mov cursorInfo.dwSize, 25
@@ -319,11 +320,11 @@ asmMain proc C
 
 		readBytes:
 			INVOKE ReadFile, fileHandle, ADDR buffer, lineLength+2, ADDR bytesRead, NULL
-			add lineCount, 1
 			cmp bytesRead, 0
 			je L1
 			mov edx, OFFSET buffer
 			call WriteString
+			add lineCount, 1
 			jmp readBytes
 
 
